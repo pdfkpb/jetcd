@@ -18,17 +18,21 @@ package io.etcd.jetcd.launcher;
 
 import static java.util.stream.Collectors.toList;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import java.net.URI;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
-import javax.annotation.Nonnull;
 import org.testcontainers.containers.Network;
 
 public class EtcdClusterFactory {
 
-  public static EtcdCluster buildCluster(@Nonnull String clusterName, int nodes, boolean ssl) {
+  public static EtcdCluster buildCluster(@NonNull String clusterName, int nodes, boolean ssl) {
+    return buildCluster(clusterName, nodes, ssl, false);
+  }
+
+  public static EtcdCluster buildCluster(@NonNull String clusterName, int nodes, boolean ssl, boolean restartable) {
     final Network network = Network.builder().id(clusterName).build();
     final CountDownLatch latch = new CountDownLatch(nodes);
     final EtcdContainer.LifecycleListener listener = new EtcdContainer.LifecycleListener() {
@@ -45,7 +49,8 @@ public class EtcdClusterFactory {
     final List<String> endpoints = IntStream.range(0, nodes).mapToObj(i -> "etcd" + i).collect(toList());
 
     final List<EtcdContainer> containers = endpoints.stream()
-                .map(e -> new EtcdContainer(network, listener, ssl, clusterName, e, endpoints)).collect(toList());
+            .map(e -> new EtcdContainer(network, listener, ssl, clusterName, e, endpoints, restartable))
+            .collect(toList());
 
     return new EtcdCluster() {
       @Override
@@ -66,13 +71,17 @@ public class EtcdClusterFactory {
         containers.forEach(EtcdContainer::close);
       }
 
-      @Nonnull
+      public void restart() {
+        containers.forEach(EtcdContainer::restart);
+      }
+
+      @NonNull
       @Override
       public List<URI> getClientEndpoints() {
         return containers.stream().map(EtcdContainer::clientEndpoint).collect(toList());
       }
 
-      @Nonnull
+      @NonNull
       @Override
       public List<URI> getPeerEndpoints() {
         return containers.stream().map(EtcdContainer::peerEndpoint).collect(toList());
